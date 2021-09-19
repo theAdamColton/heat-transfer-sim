@@ -16,7 +16,7 @@ pub trait Entity {
     /// Sets the new water to the new temperature
     /// considering the mass of added water and its temperature
     fn add_water(&mut self, added_water: &Water) {
-        let curr_water = self.get_water();
+        let curr_water = &self.get_water();
         let new_temp = (curr_water.mass * curr_water.temp + added_water.mass * added_water.temp)
             / (curr_water.mass + added_water.mass);
         let new_water = Water {
@@ -31,7 +31,7 @@ pub trait Entity {
     /// Returns Water with mass equal subtracted mass,
     /// and temerature the average of this entity's water
     fn take_water(&mut self, mass: f64) -> Water {
-        let mut water: Water = self.get_water();
+        let mut water: &mut Water = &mut self.get_water();
         let mass_to_take: f64;
         // Cannot take more water than is in this entity
         if mass > water.mass {
@@ -41,7 +41,7 @@ pub trait Entity {
         }
 
         water.mass -= mass_to_take;
-        self.set_water(water);
+        self.set_water(*water);
 
         Water {
             mass: mass_to_take,
@@ -164,7 +164,7 @@ impl Entity for Tank {
         // Calculates the (sub) instantaneous heat change
         let delta_q = heat_rate * delta_t;
 
-        //println!("r_a {}, p_r {}, n_u {}, h {}, heat_rate: {}, delta_q:{}",r_a, p_r, n_u, h, heat_rate, delta_q);
+        println!("r_a {}, p_r {}, n_u {}, h {}, heat_rate: {}, delta_q:{}",r_a, p_r, n_u, h, heat_rate, delta_q);
 
         // Applies the change to the temperatures
         self.temp += calculate_dtemp(delta_q, self.mass, self.specific_heat);
@@ -197,10 +197,12 @@ pub struct Panel {
 
 impl Entity for Panel {
     fn step(&mut self, delta_t: f64) {
-        /*** This implementation performs a very simple calculation. This is because this method
+        /*** This step implementation performs a very simple calculation. This is because this method
          * assumes that the heat_transfer_coefficient is constant as given.
          */
         let heat_rate = self.heat_transfer_coefficient * self.area * (self.water.temp - self.temp);
+
+        // Input joules (self.input_w * delta_t) are added to joules from heat exchange
         let delta_q = heat_rate * delta_t + self.input_w * delta_t;
 
         self.temp += calculate_dtemp(delta_q, self.mass, self.specific_heat);
@@ -218,19 +220,18 @@ impl Entity for Panel {
 /// t_s is the temperature of the solid object,
 /// t_inf is the temperature of the fluid
 /// The thermal expansion coeff is assumed to be 1.
-/// TODO Equation
 fn get_rayleigh(t_s: f64, length: f64, water: &Water) -> f64 {
     let viscosity = water_viscosity(water.temp);
     9.81 * (t_s - water.temp).abs() * length.powi(3) / (viscosity * WATER_DIFFUSIVITY)
 }
 
-/// Viscosity as a funct of temp of water
+/// Viscosity as a funct of temp of water. units (Kg / m * s)
 /// This calculates the dynamic viscosity.
 /// For my purposes, I assume that the dynamic viscosity is
 /// the same as the kinematic viscosity.
 /// https://en.wikipedia.org/wiki/Viscosity#Water
 fn water_viscosity(temp: f64) -> f64 {
-    0.02939 * (507.88 / (temp - 149.3)).exp()
+    29.39 * (507.88 / (temp - 149.3)).exp()
 }
 
 /// Calculates the change in temperature based on the input energy in Joules, mass, and

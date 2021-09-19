@@ -6,6 +6,8 @@
 mod entities;
 
 use entities::*;
+use std::env;
+
 
 fn main() {
     let steel_spec_heat = 466.0;
@@ -55,18 +57,18 @@ fn main() {
     let mut panel = Panel {
         area: 10.0,
         mass: 250.0,
-        heat_transfer_coefficient: 300.0,
-        input_w: 40000.0,
+        heat_transfer_coefficient: 30.0,
+        input_w: 9900.0,
         specific_heat: steel_spec_heat,
         temp: 293.0,
         water: pipewater.clone(),
     };
 
     run_simulation(
-        1e-3,
-        10.0,
-        100000.0,
-        100.0,
+        1e-1,
+        5.0,
+        10000.0,
+        10000.0,
         &mut tank,
         &mut steelpipe,
         &mut steelpipe_out,
@@ -90,7 +92,7 @@ fn run_simulation(
     panel: &mut Panel,
 ) {
     let mut i = 0;
-    while delta_t * (i as f64) < final_t {
+    while delta_t * (i as f64) <= final_t {
         let curr_t = i as f64 * delta_t;
 
         if curr_t % print_every_t == 0.0 {
@@ -101,12 +103,13 @@ fn run_simulation(
         let pumpstep = pumprate * delta_t;
 
         // Takes water from each entities and adds it to the next one
-
         pipeout.add_water(&tank.take_water(pumpstep));
         panel.add_water(&pipeout.take_water(pumpstep));
         pipein.add_water(&panel.take_water(pumpstep));
         tank.add_water(&pipein.take_water(pumpstep));
 
+
+        // Computes the step for each entity
         tank.step(delta_t);
         pipeout.step(delta_t);
         panel.step(delta_t);

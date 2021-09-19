@@ -4,11 +4,12 @@
 use std::f64::consts::PI;
 
 pub trait Entity {
-    fn step(&mut self, delta_t: f64, delta_w: f64);
+    /// Updates this entity's tempurature over a timestep delta_t
+    fn step(&mut self, delta_t: f64);
 }
 
 /// Represents a pipe at a specific point in time
-pub struct Pipe {
+pub struct Pipe<'a> {
     /// The current temperature of the Pipe surrounding, in Kelvin
     pub temp: f64,
     /// The mass in Kg
@@ -24,6 +25,8 @@ pub struct Pipe {
     /// Thermal conductivity
     /// This is in units of W/ (m*K)
     pub thermal_cond: f64,
+    /// The fluid that is contained in this pipe
+    pub fluid : &'a Fluid,
 }
 
 /// Represents an amount of Fluid at a specific point in time
@@ -64,29 +67,38 @@ pub fn calculate_pipe_heat_rate(pipe: &Pipe, fluid: &Fluid) -> f64 {
 /// For simplicity, the internal liquid temperature
 /// is only modelled as the average temperature of all of the liquid
 /// in the tank
-pub struct Tank {
+pub struct Tank<'a> {
     /// Mass of dry tank in kg
-    mass: f64,
-    height: f64,
-    radius: f64,
+    pub mass: f64,
+    pub height: f64,
+    pub radius: f64,
     /// Specific heat of dry tank J / kg * K
-    specific_heat: f64,
-    /// Mass of contained liquid in kg
-    liq_mass: f64,
-    /// Avgr temp of all of the liquid in the tank K
-    liq_avgr_temp: f64,
-    /// Specific heat of the liquid
-    liq_specific_heat: f64,
+    pub specific_heat: f64,
     /// Avgr temp of the dry tank K
-    temp: f64,
+    pub temp: f64,
+    /// Represents the fluid that is contained in this pipe
+    pub fluid: &'a Fluid,
+    /// Represents the pipe that is connected to the input
+    /// to this tank
+    pub pipe_in: &'a Pipe<'a>,
+    /// Represents the pipe that is connected to the output of
+    /// this Tank
+    pub pipe_out: &'a Pipe<'a>,
+}
+
+impl<'a> Entity for Tank<'a> {
+    fn step(&mut self, delta_t: f64) {
+
+    }
 }
 
 /// TODO Equation writeup
 /// Calculates the heat transfer rate at a specific point in time
-/// Returns the heat transfer rate in watts 
+/// for the energy transfer between the tank and the enviroment.
+/// Returns the heat transfer rate in watts
 /// https://www.engineersedge.com/heat_transfer/cylinder_heat_transfer_buried_in_medium_13835.htm
-pub fn calculate_tank_heat_rate(tank : &Tank) -> f64 {
+pub fn calculate_tank_heat_rate(tank: &Tank) -> f64 {
     // Conduction shape factor
     let s = 2f64 * PI * tank.height / (2f64 * tank.height / tank.radius).ln();
-    s * tank.liq_specific_heat * (tank.temp - tank.liq_avgr_temp)
+    s * tank.fluid.specific_heat * (tank.temp - tank.fluid.temp)
 }

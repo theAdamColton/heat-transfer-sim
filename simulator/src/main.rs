@@ -8,54 +8,110 @@ mod entities;
 use entities::*;
 
 fn main() {
-    let steel_spec_heat = 466f64;
-    let steel_thermal_cond = 35f64;
+    let steel_spec_heat = 466.0;
+    let steel_thermal_cond = 35.0;
 
     let pipewater = Water {
-        mass: 4f64,
-        temp: 25f64,
+        mass: 4.0,
+        temp: 293.0,
     };
 
     let tankfluid = Water {
-        mass: 300f64,
-        temp: 25f64,
+        mass: 300.0,
+        temp: 293.0,
     };
 
     let mut steelpipe = Pipe {
-        length: 10f64,
-        mass: 5f64,
-        rad_int: 0.05f64,
-        rad_ext: 0.07f64,
-        temp: 25f64,
-        specific_heat: 452f64,
-        thermal_cond: 35f64,
+        length: 10.0,
+        mass: 5.0,
+        rad_int: 0.05,
+        rad_ext: 0.07,
+        temp: 293.0,
+        specific_heat: 452.0,
+        thermal_cond: steel_thermal_cond,
         water: pipewater,
     };
 
     let mut steelpipe_out = Pipe {
-        length: 10f64,
-        mass: 5f64,
-        rad_int: 0.05f64,
-        rad_ext: 0.07f64,
-        temp: 25f64,
+        length: 10.0,
+        mass: 5.0,
+        rad_int: 0.05,
+        rad_ext: 0.07,
+        temp: 293.0,
         specific_heat: steel_spec_heat,
         thermal_cond: steel_thermal_cond,
         water: pipewater.clone(),
     };
 
     let mut tank = Tank {
-        mass: 40f64,
-        height: 3f64,
-        radius: 1f64,
-        specific_heat: 400f64,
-        temp: 22f64,
+        mass: 40.0,
+        height: 3.0,
+        radius: 1.0,
+        specific_heat: steel_spec_heat,
+        temp: 293.0,
         water: tankfluid,
     };
 
-    run_simulation(1e-6, 10f64, 0.5f64, &tank);
+    let mut panel = Panel {
+        area: 10.0,
+        mass: 250.0,
+        heat_transfer_coefficient: 300.0,
+        input_w: 40000.0,
+        specific_heat: steel_spec_heat,
+        temp: 293.0,
+        water: pipewater.clone(),
+    };
+
+    run_simulation(
+        1e-3,
+        10.0,
+        100000.0,
+        100.0,
+        &mut tank,
+        &mut steelpipe,
+        &mut steelpipe_out,
+        &mut panel,
+    );
 }
 
 /**
  * Runs the simulation
+ *
+ * delta_t is the time step, should be small for higher accuracy
  */
-fn run_simulation(delta_t: f64, input_watts: f64, pumprate: f64, tank: &Tank) {}
+fn run_simulation(
+    delta_t: f64,
+    pumprate: f64,
+    final_t: f64,
+    print_every_t: f64,
+    tank: &mut Tank,
+    pipein: &mut Pipe,
+    pipeout: &mut Pipe,
+    panel: &mut Panel,
+) {
+    let mut i = 0;
+    while delta_t * (i as f64) < final_t {
+        let curr_t = i as f64 * delta_t;
+
+        if curr_t % print_every_t == 0.0 {
+            println!("-----Itr {} t={}-----", i, curr_t);
+            println!("Tank: {}K\n\twater: {}Kg {}K\nPipeout: {}K\n\twater: {} Kg {}K\npanel: {}K\n\twater: {}Kg {}K\npipein: {}K\n\twater: {}Kg {}K", tank.temp, tank.water.mass, tank.water.temp, pipeout.temp, pipeout.water.mass, pipeout.water.temp, panel.temp, panel.water.mass, panel.water.temp, pipein.temp, pipein.water.mass, pipein.water.temp);
+        }
+
+        let pumpstep = pumprate * delta_t;
+
+        // Takes water from each entities and adds it to the next one
+
+        pipeout.add_water(&tank.take_water(pumpstep));
+        panel.add_water(&pipeout.take_water(pumpstep));
+        pipein.add_water(&panel.take_water(pumpstep));
+        tank.add_water(&pipein.take_water(pumpstep));
+
+        tank.step(delta_t);
+        pipeout.step(delta_t);
+        panel.step(delta_t);
+        pipein.step(delta_t);
+
+        i += 1;
+    }
+}

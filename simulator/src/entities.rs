@@ -2,13 +2,56 @@
 //! Defines structs to hold thermodynamic entities to be simulated.
 
 use std::f64::consts::PI;
-const WATER_SPECIFIC_HEAT: f64 = 4181.3f64; // J / K
+const WATER_SPECIFIC_HEAT: f64 = 4181.3f64; // J / kg K
 const WATER_DIFFUSIVITY: f64 = 1.4e-7; // m^2 / second
 const WATER_CONDUCTIVITY: f64 = 0.5918; // W / m * Kelvin
 
+/// A thermodynamic entity that contains Water
 pub trait Entity {
     /// Updates this entity's tempurature over a timestep delta_t
     fn step(&mut self, delta_t: f64);
+
+    /// Adds water to this entity
+    ///
+    /// Sets the new water to the new temperature
+    /// considering the mass of added water and its temperature
+    fn add_water(&mut self, added_water: &Water) {
+        let curr_water = self.get_water();
+        let new_temp = (curr_water.mass * curr_water.temp + added_water.mass * added_water.temp)
+            / (curr_water.mass + added_water.mass);
+        let new_water = Water {
+            mass: added_water.mass + curr_water.mass,
+            temp: new_temp,
+        };
+        self.set_water(new_water);
+    }
+
+    /// Takes water from this entity
+    ///
+    /// Returns Water with mass equal subtracted mass,
+    /// and temerature the average of this entity's water
+    fn take_water(&mut self, mass: f64) -> Water {
+        let mut water: Water = self.get_water();
+        let mass_to_take: f64;
+        // Cannot take more water than is in this entity
+        if mass > water.mass {
+            mass_to_take = water.mass;
+        } else {
+            mass_to_take = mass;
+        }
+
+        water.mass -= mass_to_take;
+        self.set_water(water);
+
+        Water {
+            mass: mass_to_take,
+            temp: water.temp,
+        }
+    }
+
+    fn get_water(&self) -> Water;
+
+    fn set_water(&mut self, water: Water);
 }
 
 /// Represents a pipe at a specific point in time
@@ -34,7 +77,7 @@ pub struct Pipe {
 
 /**
  * Calculate the heat transfer rate (W) at a specific point in time
- * between a Pipe and a constant temperature fluid, then applies the 
+ * between a Pipe and a constant temperature fluid, then applies the
  * heat change to the pipe temperature and the water temperature.
  */
 impl Entity for Pipe {
@@ -51,8 +94,15 @@ impl Entity for Pipe {
 
         let delta_q = heat_rate * delta_t;
 
-        self.temp = calculate_temp(delta_q, self.mass, self.specific_heat);
-        self.water.temp = calculate_temp(delta_q, self.water.mass, WATER_SPECIFIC_HEAT);
+        self.temp += calculate_dtemp(delta_q, self.mass, self.specific_heat);
+        self.water.temp += calculate_dtemp(delta_q, self.water.mass, WATER_SPECIFIC_HEAT);
+    }
+
+    fn get_water(&self) -> Water {
+        self.water
+    }
+    fn set_water(&mut self, water: Water) {
+        self.water = water
     }
 }
 
@@ -65,11 +115,6 @@ pub struct Water {
     pub temp: f64,
     /// Mass of this unit of water in kg
     pub mass: f64,
-}
-
-/// TODO Equation in write up
-pub fn calculate_pipe_heat_rate(pipe: &Pipe, water: &Water) -> f64 {
-    0f64
 }
 
 /// Represents a liquid tank
@@ -119,10 +164,19 @@ impl Entity for Tank {
         // Calculates the (sub) instantaneous heat change
         let delta_q = heat_rate * delta_t;
 
-        // Applies the change to the temperatures
-        self.temp = calculate_temp(delta_q, self.mass, self.specific_heat);
+        //println!("r_a {}, p_r {}, n_u {}, h {}, heat_rate: {}, delta_q:{}",r_a, p_r, n_u, h, heat_rate, delta_q);
 
-        self.water.temp = calculate_temp(delta_q, self.water.mass, WATER_SPECIFIC_HEAT);
+        // Applies the change to the temperatures
+        self.temp += calculate_dtemp(delta_q, self.mass, self.specific_heat);
+
+        self.water.temp += calculate_dtemp(delta_q, self.water.mass, WATER_SPECIFIC_HEAT);
+    }
+
+    fn get_water(&self) -> Water {
+        self.water
+    }
+    fn set_water(&mut self, water: Water) {
+        self.water = water
     }
 }
 
@@ -131,23 +185,34 @@ pub struct Panel {
     /// Area in m^2
     pub area: f64,
     pub temp: f64,
-    /// Input heat into the system
-    pub input_j: f64,
+    /// Input heat into the system in watts
+    pub input_w: f64,
     pub water: Water,
     pub specific_heat: f64,
     /// The heat transfer coeffient for this panel;
     /// This can differ significantly based on
-    /// heat exchanger design.
+    /// heat exchanger design. (W/ m^2 K)
     pub heat_transfer_coefficient: f64,
 }
 
 impl Entity for Panel {
-    fn step(&mut self, delta_t: f64) {}
-}
+    fn step(&mut self, delta_t: f64) {
+        /*** This implementation performs a very simple calculation. This is because this method
+         * assumes that the heat_transfer_coefficient is constant as given.
+         */
+        let heat_rate = self.heat_transfer_coefficient * self.area * (self.water.temp - self.temp);
+        let delta_q = heat_rate * delta_t + self.input_w * delta_t;
 
-/// Get the heat rate between this panel and the fluid
-pub fn panel_heat_rate(panel: &Panel) -> f64 {
-    0f64
+        self.temp += calculate_dtemp(delta_q, self.mass, self.specific_heat);
+        self.water.temp += calculate_dtemp(delta_q, self.water.mass, WATER_SPECIFIC_HEAT);
+    }
+
+    fn get_water(&self) -> Water {
+        self.water
+    }
+    fn set_water(&mut self, water: Water) {
+        self.water = water
+    }
 }
 
 /// t_s is the temperature of the solid object,
@@ -156,7 +221,7 @@ pub fn panel_heat_rate(panel: &Panel) -> f64 {
 /// TODO Equation
 fn get_rayleigh(t_s: f64, length: f64, water: &Water) -> f64 {
     let viscosity = water_viscosity(water.temp);
-    9.81 * (t_s - water.temp) * length.powi(3) / (viscosity * WATER_DIFFUSIVITY)
+    9.81 * (t_s - water.temp).abs() * length.powi(3) / (viscosity * WATER_DIFFUSIVITY)
 }
 
 /// Viscosity as a funct of temp of water
@@ -168,8 +233,9 @@ fn water_viscosity(temp: f64) -> f64 {
     0.02939 * (507.88 / (temp - 149.3)).exp()
 }
 
-/// Calculates the temperature change over a time unit delta_t
+/// Calculates the change in temperature based on the input energy in Joules, mass, and
+/// specific_heat
 /// temp = q (J) / (m (kg) * c (J/ kg * K) )
-pub fn calculate_temp(delta_q: f64, mass: f64, specific_heat: f64) -> f64 {
+pub fn calculate_dtemp(delta_q: f64, mass: f64, specific_heat: f64) -> f64 {
     delta_q / (mass * specific_heat)
 }

@@ -73,6 +73,8 @@ pub struct Pipe {
     pub thermal_cond: f64,
     /// The fluid that is contained in this pipe
     pub water: Water,
+    /// The heat transfer coefficient between this pipe and the surronding mileau
+    pub h_ext: f64,
 }
 
 /**
@@ -86,11 +88,10 @@ impl Entity for Pipe {
         let h_int: f64 = self.thermal_cond / (self.rad_ext - self.rad_int);
         // The heat transfer coefficient of the pipe exterior wall and the
         // surrounding material
-        let h_ext: f64 = 2f64;
         let heat_rate = 2f64 * PI * self.length * (self.water.temp - self.temp)
             / (1f64 / (h_int * self.rad_int)
                 + (1f64 / self.thermal_cond) * (self.rad_ext / self.rad_int).ln()
-                + 1f64 / (h_ext * self.rad_ext));
+                + 1f64 / (self.h_ext * self.rad_ext));
 
         let delta_q = heat_rate * delta_t;
 
@@ -164,7 +165,7 @@ impl Entity for Tank {
         // Calculates the (sub) instantaneous heat change
         let delta_q = heat_rate * delta_t;
 
-        println!("r_a {}, p_r {}, n_u {}, h {}, heat_rate: {}, delta_q:{}",r_a, p_r, n_u, h, heat_rate, delta_q);
+        //println!("r_a {}, p_r {}, n_u {}, h {}, heat_rate: {}, delta_q:{}",r_a, p_r, n_u, h, heat_rate, delta_q);
 
         // Applies the change to the temperatures
         self.temp += calculate_dtemp(delta_q, self.mass, self.specific_heat);

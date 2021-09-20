@@ -1,12 +1,11 @@
 /**
  * Adam Colton 2021
  *
- * Runs the simulator on a variety of starting conditions
+ * Runs the simulator on a set of starting conditions
  */
 mod entities;
 
 use entities::*;
-use std::env;
 
 
 fn main() {
@@ -30,6 +29,7 @@ fn main() {
         rad_ext: 0.07,
         temp: 293.0,
         specific_heat: 452.0,
+        h_ext: 200.0,
         thermal_cond: steel_thermal_cond,
         water: pipewater,
     };
@@ -40,6 +40,7 @@ fn main() {
         rad_int: 0.05,
         rad_ext: 0.07,
         temp: 293.0,
+        h_ext: 200.0,
         specific_heat: steel_spec_heat,
         thermal_cond: steel_thermal_cond,
         water: pipewater.clone(),
@@ -50,7 +51,7 @@ fn main() {
         height: 3.0,
         radius: 1.0,
         specific_heat: steel_spec_heat,
-        temp: 293.0,
+        temp: 299.0,
         water: tankfluid,
     };
 
@@ -64,8 +65,9 @@ fn main() {
         water: pipewater.clone(),
     };
 
+
     run_simulation(
-        1e-1,
+        1e-4,
         5.0,
         10000.0,
         10000.0,
@@ -79,7 +81,10 @@ fn main() {
 /**
  * Runs the simulation
  *
- * delta_t is the time step, should be small for higher accuracy
+ * delta_t is the time step, should be small for higher accuracy.
+ * pumprate is the kg / s that the simulator will transfer between entities.
+ * final_t defines how many seconds to run the simulator for.
+ * print_every_t defines how often to print Entity temperature info.
  */
 fn run_simulation(
     delta_t: f64,
@@ -99,6 +104,11 @@ fn run_simulation(
             println!("-----Itr {} t={}-----", i, curr_t);
             println!("Tank: {}K\n\twater: {}Kg {}K\nPipeout: {}K\n\twater: {} Kg {}K\npanel: {}K\n\twater: {}Kg {}K\npipein: {}K\n\twater: {}Kg {}K", tank.temp, tank.water.mass, tank.water.temp, pipeout.temp, pipeout.water.mass, pipeout.water.temp, panel.temp, panel.water.mass, panel.water.temp, pipein.temp, pipein.water.mass, pipein.water.temp);
         }
+        // Computes the step for each entity
+        tank.step(delta_t);
+        pipeout.step(delta_t);
+        panel.step(delta_t);
+        pipein.step(delta_t);
 
         let pumpstep = pumprate * delta_t;
 
@@ -107,13 +117,6 @@ fn run_simulation(
         panel.add_water(&pipeout.take_water(pumpstep));
         pipein.add_water(&panel.take_water(pumpstep));
         tank.add_water(&pipein.take_water(pumpstep));
-
-
-        // Computes the step for each entity
-        tank.step(delta_t);
-        pipeout.step(delta_t);
-        panel.step(delta_t);
-        pipein.step(delta_t);
 
         i += 1;
     }
